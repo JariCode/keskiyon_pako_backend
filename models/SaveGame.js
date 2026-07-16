@@ -12,6 +12,7 @@ const saveGameSchema = new mongoose.Schema({
   inventory: { type: [String], default: [] },
   zombiesKilled: { type: Number, default: 0 },
   progress: { type: mongoose.Schema.Types.Mixed, default: {} },
+  lastSaveTimestamp: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });
 

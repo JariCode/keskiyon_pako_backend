@@ -10,8 +10,14 @@ const { registerSchema, loginSchema } = require('../schemas/authSchemas');
 
 const SALT_ROUNDS = 12;
 
+// --- Tokenin kesto luetaan .env:istä ---
+const TOKEN_EXPIRES_IN_DAYS = Number(process.env.JWT_EXPIRES_IN_DAYS) || 7;
+const TOKEN_EXPIRES_IN_MS = TOKEN_EXPIRES_IN_DAYS * 24 * 60 * 60 * 1000;
+
 function createToken(userId) {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ userId }, process.env.JWT_SECRET, {
+    expiresIn: `${TOKEN_EXPIRES_IN_DAYS}d`,
+  });
 }
 
 function setCookie(res, token) {
@@ -19,10 +25,11 @@ function setCookie(res, token) {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge: TOKEN_EXPIRES_IN_MS,
   });
 }
 
+// --- REKISTERÖINTI ---
 router.post('/register', validate(registerSchema), async (req, res) => {
   const { username, email, password } = req.body;
 
@@ -45,6 +52,7 @@ router.post('/register', validate(registerSchema), async (req, res) => {
   }
 });
 
+// --- KIRJAUTUMINEN ---
 router.post('/login', validate(loginSchema), async (req, res) => {
   const { email, password } = req.body;
 
@@ -69,11 +77,13 @@ router.post('/login', validate(loginSchema), async (req, res) => {
   }
 });
 
+// --- ULOSKIRJAUTUMINEN ---
 router.post('/logout', (req, res) => {
   res.clearCookie('token');
   res.json({ message: 'Uloskirjautuminen onnistui' });
 });
 
+// --- NYKYINEN KÄYTTÄJÄ ---
 router.get('/me', requireAuth, async (req, res) => {
   const user = await User.findById(req.userId).select('username email');
   res.json(user);

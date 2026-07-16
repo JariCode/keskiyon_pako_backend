@@ -15,7 +15,7 @@ const app = express();
 app.use(helmet());
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: process.env.FRONTEND_URL,
   credentials: true,
 }));
 
@@ -38,6 +38,13 @@ const authLimiter = rateLimit({
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
+const saveLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 15,
+  message: 'Liian monta tallennuspyyntöä.',
+});
+app.use('/api/save', saveLimiter);
+
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('MongoDB yhdistetty'))
   .catch((err) => console.error('MongoDB-virhe:', err));
@@ -46,7 +53,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/save', saveRoutes);
 
 app.get('/', (req, res) => {
-  res.send('Pako Yö backend käynnissä');
+  res.send('Keskiyön Pako backend käynnissä');
 });
 
 app.use((err, req, res, next) => {

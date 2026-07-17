@@ -4,9 +4,9 @@ const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const mongoSanitize = require('express-mongo-sanitize');
 require('dotenv').config();
 
+const sanitize = require('./middleware/sanitize');
 const authRoutes = require('./routes/auth');
 const saveRoutes = require('./routes/save');
 
@@ -21,7 +21,7 @@ app.use(cors({
 
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
-app.use(mongoSanitize());
+app.use(sanitize);
 
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

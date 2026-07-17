@@ -7,6 +7,7 @@ const saveGameSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+  characterName: { type: String, default: 'Ukko', trim: true, maxlength: 20 },
   hp: { type: Number, default: 100 },
   currentArea: { type: String, default: 'asunto' },
   inventory: { type: [String], default: [] },

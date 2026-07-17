@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', validate(saveSchema), async (req, res) => {
-  const { hp, currentArea, inventory, zombiesKilled, progress } = req.body;
+  const { characterName, hp, currentArea, inventory, zombiesKilled, progress } = req.body;
 
   try {
     const existing = await SaveGame.findOne({ userId: req.userId });
@@ -55,6 +55,7 @@ router.post('/', validate(saveSchema), async (req, res) => {
     const save = await SaveGame.findOneAndUpdate(
       { userId: req.userId },
       {
+        characterName,
         hp: clampedHP,
         currentArea,
         inventory,

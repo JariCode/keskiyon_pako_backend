@@ -4,13 +4,20 @@ const jwt = require('jsonwebtoken');
 const router = express.Router();
 
 const User = require('../models/User');
+const SaveGame = require('../models/SaveGame');
 const validate = require('../middleware/validate');
 const requireAuth = require('../middleware/requireAuth');
-const { registerSchema, loginSchema } = require('../schemas/authSchemas');
+const {
+  registerSchema,
+  loginSchema,
+  updateUsernameSchema,
+  updateEmailSchema,
+  updatePasswordSchema,
+  deleteAccountSchema,
+} = require('../schemas/authSchemas');
 
 const SALT_ROUNDS = 12;
 
-// --- Tokenin kesto luetaan .env:istä ---
 const TOKEN_EXPIRES_IN_DAYS = Number(process.env.JWT_EXPIRES_IN_DAYS) || 7;
 const TOKEN_EXPIRES_IN_MS = TOKEN_EXPIRES_IN_DAYS * 24 * 60 * 60 * 1000;
 
@@ -87,6 +94,101 @@ router.post('/logout', (req, res) => {
 router.get('/me', requireAuth, async (req, res) => {
   const user = await User.findById(req.userId).select('username email');
   res.json(user);
+});
+
+// --- VAIHDA KÄYTTÄJÄNIMI ---
+router.patch('/username', requireAuth, validate(updateUsernameSchema), async (req, res) => {
+  const { username, currentPassword } = req.body;
+
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ error: 'Käyttäjää ei löytynyt' });
+
+    const match = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!match) return res.status(401).json({ error: 'Väärä salasana' });
+
+    const taken = await User.findOne({ username, _id: { $ne: user._id } });
+    if (taken) return res.status(409).json({ error: 'Käyttäjänimi on jo käytössä' });
+
+    user.username = username;
+    await user.save();
+
+    res.json({ username: user.username });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Käyttäjänimen vaihto epäonnistui' });
+  }
+});
+
+// --- VAIHDA SÄHKÖPOSTI ---
+router.patch('/email', requireAuth, validate(updateEmailSchema), async (req, res) => {
+  const { email, currentPassword } = req.body;
+
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ error: 'Käyttäjää ei löytynyt' });
+
+    const match = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!match) return res.status(401).json({ error: 'Väärä salasana' });
+
+    const taken = await User.findOne({ email, _id: { $ne: user._id } });
+    if (taken) return res.status(409).json({ error: 'Sähköposti on jo käytössä' });
+
+    user.email = email;
+    await user.save();
+
+    res.json({ email: user.email });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Sähköpostin vaihto epäonnistui' });
+  }
+});
+
+// --- VAIHDA SALASANA ---
+router.patch('/password', requireAuth, validate(updatePasswordSchema), async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ error: 'Käyttäjää ei löytynyt' });
+
+    const match = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!match) return res.status(401).json({ error: 'Väärä salasana' });
+
+    user.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await user.save();
+
+    // Uusi token, jotta vanha istunto ei jää voimaan
+    const token = createToken(user._id);
+    setCookie(res, token);
+
+    res.json({ message: 'Salasana vaihdettu' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Salasanan vaihto epäonnistui' });
+  }
+});
+
+// --- POISTA TILI + PELITIEDOT ---
+router.delete('/account', requireAuth, validate(deleteAccountSchema), async (req, res) => {
+  const { currentPassword } = req.body;
+
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ error: 'Käyttäjää ei löytynyt' });
+
+    const match = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!match) return res.status(401).json({ error: 'Väärä salasana' });
+
+    await SaveGame.deleteOne({ userId: user._id });
+    await User.deleteOne({ _id: user._id });
+
+    res.clearCookie('token');
+    res.json({ message: 'Tili ja pelitiedot poistettu' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Tilin poisto epäonnistui' });
+  }
 });
 
 module.exports = router;

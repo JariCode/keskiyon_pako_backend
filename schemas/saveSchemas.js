@@ -8,7 +8,7 @@ const saveSchema = z.object({
   hp: z.number().min(0).max(1000),
   currentArea: z.enum([
     'asunto', 'kaytava', 'aula', 'kaupunki',
-    'metsa', 'mokki', 'kartano', 'hautausmaa', 'kirkko',
+    'metsa', 'mokki', 'kartano', 'hautausmaa', 'kirkko', 'katakombi'
   ]),
   inventory: z.array(z.string()).max(50),
   zombiesKilled: z.number().int().min(0).max(9999),

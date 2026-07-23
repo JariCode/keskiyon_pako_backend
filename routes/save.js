@@ -50,7 +50,8 @@ router.post('/', validate(saveSchema), async (req, res) => {
 
     const level = calculateLevel(zombiesKilled);
     const maxHP = calculateMaxHP(level);
-    const clampedHP = Math.min(hp, maxHP);
+    // Rajaa HP molemmista päistä: ei yli maksimin eikä alle nollan.
+    const clampedHP = Math.max(0, Math.min(hp, maxHP));
 
     const save = await SaveGame.findOneAndUpdate(
       { userId: req.userId },

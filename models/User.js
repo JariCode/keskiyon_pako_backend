@@ -25,6 +25,17 @@ const userSchema = new mongoose.Schema({
     enum: ['user', 'admin'],
     default: 'user',
   },
+  // Tilin lukitus: peräkkäiset epäonnistuneet kirjautumiset. Rate limit
+  // kohdistuu IP:hen, tämä kohdistuu tiliin — suojaa hajautetulta
+  // salasana-arvailulta (sama tili, monta IP:tä).
+  failedLoginAttempts: {
+    type: Number,
+    default: 0,
+  },
+  lockedUntil: {
+    type: Date,
+    default: null,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

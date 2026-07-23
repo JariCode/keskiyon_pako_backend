@@ -52,6 +52,14 @@ const logSchema = new mongoose.Schema({
     default: {},
   },
 
+  // IP-osoite väärinkäytön jäljitystä varten. HUOM: IP on henkilötieto,
+  // joten sen kerääminen on mainittava tietosuojaselosteessa. Poistuu
+  // automaattisesti muun lokin mukana (TTL-indeksi alla).
+  ip: {
+    type: String,
+    default: null,
+  },
+
   createdAt: {
     type: Date,
     default: Date.now,

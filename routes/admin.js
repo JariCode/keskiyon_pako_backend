@@ -17,15 +17,17 @@ router.use(requireAuth, requireAdmin);
 router.get('/users', async (req, res) => {
   try {
     const users = await User.find()
-      .select('username email role createdAt')
+      .select('username email role createdAt lockedUntil failedLoginAttempts')
       .sort({ createdAt: -1 })
       .lean();
 
     // Merkitään kirjautunut admin, jotta frontend osaa estää itsensä
     // poistamisen/alentamisen myös käyttöliittymässä.
+    const now = new Date();
     const withSelf = users.map((u) => ({
       ...u,
       isSelf: String(u._id) === String(req.adminUser._id),
+      isLocked: !!(u.lockedUntil && new Date(u.lockedUntil) > now),
     }));
 
     res.json(withSelf);
@@ -92,12 +94,43 @@ router.patch('/users/:id/role', validate(changeRoleSchema), async (req, res) => 
       action: 'admin_change_role',
       description: `Admin ${req.adminUser.username} muutti käyttäjän ${target.username} rooliksi ${roleText}`,
       meta: { oldRole, newRole: role },
+      req,
     });
 
     res.json({ username: target.username, role: target.role });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Roolin vaihto epäonnistui' });
+  }
+});
+
+// --- AVAA LUKITTU TILI ---
+router.patch('/users/:id/unlock', async (req, res) => {
+  try {
+    const target = await User.findById(req.params.id);
+    if (!target) return res.status(404).json({ error: 'Käyttäjää ei löytynyt' });
+
+    const wasLocked = !!(target.lockedUntil && target.lockedUntil > new Date());
+    if (!wasLocked && !target.failedLoginAttempts) {
+      return res.status(400).json({ error: 'Tili ei ole lukittu' });
+    }
+
+    target.lockedUntil = null;
+    target.failedLoginAttempts = 0;
+    await target.save();
+
+    await writeLog({
+      actor: req.adminUser,
+      target,
+      action: 'admin_unlock_account',
+      description: `Admin ${req.adminUser.username} avasi käyttäjän ${target.username} lukitun tilin`,
+      req,
+    });
+
+    res.json({ username: target.username, message: 'Tili avattu' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Tilin avaus epäonnistui' });
   }
 });
 
@@ -126,6 +159,7 @@ router.delete('/users/:id', async (req, res) => {
       action: 'admin_delete_user',
       description: `Admin ${req.adminUser.username} poisti käyttäjän ${targetName}`,
       meta: { deletedRole: targetRole },
+      req,
     });
 
     res.json({ message: `Käyttäjä ${targetName} poistettu` });

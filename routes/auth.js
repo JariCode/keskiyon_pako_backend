@@ -19,6 +19,12 @@ const {
 
 const SALT_ROUNDS = 12;
 
+// Tilin lukitus: näin monta peräkkäistä epäonnistunutta kirjautumista ennen
+// lukitusta, ja lukituksen kesto. Suojaa hajautetulta salasana-arvailulta
+// (IP-pohjainen rate limit ei auta jos hyökkääjällä on monta IP:tä).
+const MAX_FAILED_LOGINS = 5;
+const LOCK_DURATION_MS = 15 * 60 * 1000;
+
 const TOKEN_EXPIRES_IN_DAYS = Number(process.env.JWT_EXPIRES_IN_DAYS) || 7;
 const TOKEN_EXPIRES_IN_MS = TOKEN_EXPIRES_IN_DAYS * 24 * 60 * 60 * 1000;
 
@@ -57,6 +63,7 @@ router.post('/register', validate(registerSchema), async (req, res) => {
       actor: user,
       action: 'register',
       description: `${user.username} rekisteröityi käyttäjäksi`,
+      req,
     });
 
     res.status(201).json({ username: user.username });
@@ -73,12 +80,56 @@ router.post('/login', validate(loginSchema), async (req, res) => {
   try {
     const user = await User.findOne({ email });
     if (!user) {
+      // Sama viesti kuin väärällä salasanalla, jottei paljasteta onko
+      // sähköposti olemassa (käyttäjien luettelointi estetty).
       return res.status(401).json({ error: 'Virheellinen sähköposti tai salasana' });
+    }
+
+    // Onko tili lukittu liian monen epäonnistuneen yrityksen takia?
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      return res.status(423).json({
+        error: 'Tili on lukittu liian monen epäonnistuneen kirjautumisen takia. Yritä myöhemmin uudelleen.',
+      });
     }
 
     const match = await bcrypt.compare(password, user.passwordHash);
     if (!match) {
+      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+
+      if (user.failedLoginAttempts >= MAX_FAILED_LOGINS) {
+        user.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
+        user.failedLoginAttempts = 0;
+        await user.save();
+
+        await writeLog({
+          actor: user,
+          action: 'account_locked',
+          description: `${user.username} tili lukittiin ${MAX_FAILED_LOGINS} epäonnistuneen kirjautumisen jälkeen`,
+          req,
+        });
+
+        return res.status(423).json({
+          error: 'Tili on lukittu liian monen epäonnistuneen kirjautumisen takia. Yritä myöhemmin uudelleen.',
+        });
+      }
+
+      await user.save();
+
+      await writeLog({
+        actor: user,
+        action: 'login_failed',
+        description: `${user.username} epäonnistunut kirjautumisyritys (${user.failedLoginAttempts}/${MAX_FAILED_LOGINS})`,
+        req,
+      });
+
       return res.status(401).json({ error: 'Virheellinen sähköposti tai salasana' });
+    }
+
+    // Onnistunut kirjautuminen: nollaa laskurit
+    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+      user.failedLoginAttempts = 0;
+      user.lockedUntil = null;
+      await user.save();
     }
 
     const token = createToken(user._id);
@@ -88,6 +139,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
       actor: user,
       action: 'login',
       description: `${user.username} kirjautui sisään`,
+      req,
     });
 
     res.json({ username: user.username });
@@ -107,6 +159,7 @@ router.post('/logout', requireAuth, async (req, res) => {
         actor: user,
         action: 'logout',
         description: `${user.username} kirjautui ulos`,
+        req,
       });
     }
   } catch (err) {
@@ -145,6 +198,7 @@ router.patch('/username', requireAuth, validate(updateUsernameSchema), async (re
       action: 'username_change',
       description: `${oldUsername} vaihtoi käyttäjätunnuksen: ${oldUsername} -> ${username}`,
       meta: { oldUsername, newUsername: username },
+      req,
     });
 
     res.json({ username: user.username });
@@ -177,6 +231,7 @@ router.patch('/email', requireAuth, validate(updateEmailSchema), async (req, res
       action: 'email_change',
       description: `${user.username} vaihtoi sähköpostin: ${oldEmail} -> ${email}`,
       meta: { oldEmail, newEmail: email },
+      req,
     });
 
     res.json({ email: user.email });
@@ -208,6 +263,7 @@ router.patch('/password', requireAuth, validate(updatePasswordSchema), async (re
       actor: user,
       action: 'password_change',
       description: `${user.username} vaihtoi salasanansa`,
+      req,
     });
 
     res.json({ message: 'Salasana vaihdettu' });
@@ -231,7 +287,7 @@ router.delete('/account', requireAuth, validate(deleteAccountSchema), async (req
     // ESTO: admin ei voi poistaa itseään myöskään profiilisivulta
     if (user.role === 'admin') {
       return res.status(400).json({
-        error: 'Ylläpitäjä ei voi poistaa omaa tiliään. Poista ensin admin-oikeudet toiselta ylläpitäjältä.',
+        error: 'Ylläpitäjä ei voi poistaa omaa tiliään. Pyydä toista ylläpitäjää poistamaan tunnuksesi.',
       });
     }
 
@@ -239,6 +295,7 @@ router.delete('/account', requireAuth, validate(deleteAccountSchema), async (req
       actor: user,
       action: 'account_delete',
       description: `${user.username} poisti oman tilinsä`,
+      req,
     });
 
     await SaveGame.deleteOne({ userId: user._id });

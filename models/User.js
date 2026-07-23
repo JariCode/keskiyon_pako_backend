@@ -20,15 +20,14 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user',
+  },
   createdAt: {
     type: Date,
     default: Date.now,
-  },
-  audioSettings: {
-    musicVolume: { type: Number, default: 0.7, min: 0, max: 1 },
-    sfxVolume: { type: Number, default: 0.5, min: 0, max: 1 },
-    musicMuted: { type: Boolean, default: false },
-    sfxMuted: { type: Boolean, default: false },
   },
 });
 

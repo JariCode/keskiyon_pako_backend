@@ -9,6 +9,7 @@ require('dotenv').config();
 const sanitize = require('./middleware/sanitize');
 const authRoutes = require('./routes/auth');
 const saveRoutes = require('./routes/save');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 
@@ -51,6 +52,7 @@ mongoose.connect(process.env.MONGODB_URI)
 
 app.use('/api/auth', authRoutes);
 app.use('/api/save', saveRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/', (req, res) => {
   res.send('Keskiyön Pako backend käynnissä');

@@ -7,6 +7,7 @@ const User = require('../models/User');
 const SaveGame = require('../models/SaveGame');
 const validate = require('../middleware/validate');
 const requireAuth = require('../middleware/requireAuth');
+const writeLog = require('../utils/writeLog');
 const {
   registerSchema,
   loginSchema,
@@ -14,7 +15,6 @@ const {
   updateEmailSchema,
   updatePasswordSchema,
   deleteAccountSchema,
-  updateAudioSettingsSchema,
 } = require('../schemas/authSchemas');
 
 const SALT_ROUNDS = 12;
@@ -53,6 +53,12 @@ router.post('/register', validate(registerSchema), async (req, res) => {
     const token = createToken(user._id);
     setCookie(res, token);
 
+    await writeLog({
+      actor: user,
+      action: 'register',
+      description: `${user.username} rekisteröityi käyttäjäksi`,
+    });
+
     res.status(201).json({ username: user.username });
   } catch (err) {
     console.error(err);
@@ -78,6 +84,12 @@ router.post('/login', validate(loginSchema), async (req, res) => {
     const token = createToken(user._id);
     setCookie(res, token);
 
+    await writeLog({
+      actor: user,
+      action: 'login',
+      description: `${user.username} kirjautui sisään`,
+    });
+
     res.json({ username: user.username });
   } catch (err) {
     console.error(err);
@@ -86,14 +98,27 @@ router.post('/login', validate(loginSchema), async (req, res) => {
 });
 
 // --- ULOSKIRJAUTUMINEN ---
-router.post('/logout', (req, res) => {
+// requireAuth, jotta tiedämme kuka kirjautui ulos (lokitusta varten).
+router.post('/logout', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select('username role');
+    if (user) {
+      await writeLog({
+        actor: user,
+        action: 'logout',
+        description: `${user.username} kirjautui ulos`,
+      });
+    }
+  } catch (err) {
+    console.error(err);
+  }
   res.clearCookie('token');
   res.json({ message: 'Uloskirjautuminen onnistui' });
 });
 
 // --- NYKYINEN KÄYTTÄJÄ ---
 router.get('/me', requireAuth, async (req, res) => {
-  const user = await User.findById(req.userId).select('username email audioSettings');
+  const user = await User.findById(req.userId).select('username email role');
   res.json(user);
 });
 
@@ -111,8 +136,16 @@ router.patch('/username', requireAuth, validate(updateUsernameSchema), async (re
     const taken = await User.findOne({ username, _id: { $ne: user._id } });
     if (taken) return res.status(409).json({ error: 'Käyttäjänimi on jo käytössä' });
 
+    const oldUsername = user.username;
     user.username = username;
     await user.save();
+
+    await writeLog({
+      actor: user,
+      action: 'username_change',
+      description: `${oldUsername} vaihtoi käyttäjätunnuksen: ${oldUsername} -> ${username}`,
+      meta: { oldUsername, newUsername: username },
+    });
 
     res.json({ username: user.username });
   } catch (err) {
@@ -135,8 +168,16 @@ router.patch('/email', requireAuth, validate(updateEmailSchema), async (req, res
     const taken = await User.findOne({ email, _id: { $ne: user._id } });
     if (taken) return res.status(409).json({ error: 'Sähköposti on jo käytössä' });
 
+    const oldEmail = user.email;
     user.email = email;
     await user.save();
+
+    await writeLog({
+      actor: user,
+      action: 'email_change',
+      description: `${user.username} vaihtoi sähköpostin: ${oldEmail} -> ${email}`,
+      meta: { oldEmail, newEmail: email },
+    });
 
     res.json({ email: user.email });
   } catch (err) {
@@ -163,6 +204,12 @@ router.patch('/password', requireAuth, validate(updatePasswordSchema), async (re
     const token = createToken(user._id);
     setCookie(res, token);
 
+    await writeLog({
+      actor: user,
+      action: 'password_change',
+      description: `${user.username} vaihtoi salasanansa`,
+    });
+
     res.json({ message: 'Salasana vaihdettu' });
   } catch (err) {
     console.error(err);
@@ -181,6 +228,19 @@ router.delete('/account', requireAuth, validate(deleteAccountSchema), async (req
     const match = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!match) return res.status(401).json({ error: 'Väärä salasana' });
 
+    // ESTO: admin ei voi poistaa itseään myöskään profiilisivulta
+    if (user.role === 'admin') {
+      return res.status(400).json({
+        error: 'Ylläpitäjä ei voi poistaa omaa tiliään. Poista ensin admin-oikeudet toiselta ylläpitäjältä.',
+      });
+    }
+
+    await writeLog({
+      actor: user,
+      action: 'account_delete',
+      description: `${user.username} poisti oman tilinsä`,
+    });
+
     await SaveGame.deleteOne({ userId: user._id });
     await User.deleteOne({ _id: user._id });
 
@@ -189,24 +249,6 @@ router.delete('/account', requireAuth, validate(deleteAccountSchema), async (req
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Tilin poisto epäonnistui' });
-  }
-});
-
-// --- TALLENNA ÄÄNIASETUKSET ---
-router.patch('/settings', requireAuth, validate(updateAudioSettingsSchema), async (req, res) => {
-  const { musicVolume, sfxVolume, musicMuted, sfxMuted } = req.body;
-
-  try {
-    const user = await User.findById(req.userId);
-    if (!user) return res.status(404).json({ error: 'Käyttäjää ei löytynyt' });
-
-    user.audioSettings = { musicVolume, sfxVolume, musicMuted, sfxMuted };
-    await user.save();
-
-    res.json({ audioSettings: user.audioSettings });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Ääniasetusten tallennus epäonnistui' });
   }
 });
 

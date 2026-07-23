@@ -43,6 +43,13 @@ const deleteAccountSchema = z.object({
   }),
 });
 
+const updateAudioSettingsSchema = z.object({
+  musicVolume: z.number().min(0).max(1),
+  sfxVolume: z.number().min(0).max(1),
+  musicMuted: z.boolean(),
+  sfxMuted: z.boolean(),
+});
+
 module.exports = {
   registerSchema,
   loginSchema,
@@ -50,4 +57,5 @@ module.exports = {
   updateEmailSchema,
   updatePasswordSchema,
   deleteAccountSchema,
+  updateAudioSettingsSchema,
 };

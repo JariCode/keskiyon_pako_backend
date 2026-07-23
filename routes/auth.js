@@ -14,6 +14,7 @@ const {
   updateEmailSchema,
   updatePasswordSchema,
   deleteAccountSchema,
+  updateAudioSettingsSchema,
 } = require('../schemas/authSchemas');
 
 const SALT_ROUNDS = 12;
@@ -92,7 +93,7 @@ router.post('/logout', (req, res) => {
 
 // --- NYKYINEN KÄYTTÄJÄ ---
 router.get('/me', requireAuth, async (req, res) => {
-  const user = await User.findById(req.userId).select('username email');
+  const user = await User.findById(req.userId).select('username email audioSettings');
   res.json(user);
 });
 
@@ -188,6 +189,24 @@ router.delete('/account', requireAuth, validate(deleteAccountSchema), async (req
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Tilin poisto epäonnistui' });
+  }
+});
+
+// --- TALLENNA ÄÄNIASETUKSET ---
+router.patch('/settings', requireAuth, validate(updateAudioSettingsSchema), async (req, res) => {
+  const { musicVolume, sfxVolume, musicMuted, sfxMuted } = req.body;
+
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ error: 'Käyttäjää ei löytynyt' });
+
+    user.audioSettings = { musicVolume, sfxVolume, musicMuted, sfxMuted };
+    await user.save();
+
+    res.json({ audioSettings: user.audioSettings });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ääniasetusten tallennus epäonnistui' });
   }
 });
 

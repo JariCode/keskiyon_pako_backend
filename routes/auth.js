@@ -48,6 +48,8 @@ router.post('/register', validate(registerSchema), async (req, res) => {
   const { username, email, password } = req.body;
 
   try {
+    // Yhtenäinen viesti molemmista: ei paljasteta kummasta kentästä on kyse,
+    // jolloin sähköpostin olemassaoloa ei voi selvittää kokeilemalla.
     const existing = await User.findOne({ $or: [{ email }, { username }] });
     if (existing) {
       return res.status(409).json({ error: 'Käyttäjänimi tai sähköposti on jo käytössä' });
@@ -150,20 +152,27 @@ router.post('/login', validate(loginSchema), async (req, res) => {
 });
 
 // --- ULOSKIRJAUTUMINEN ---
-// requireAuth, jotta tiedämme kuka kirjautui ulos (lokitusta varten).
-router.post('/logout', requireAuth, async (req, res) => {
+// EI requireAuth: eväste on tyhjennettävä myös silloin kun token on
+// vanhentunut tai käyttäjä poistettu — muuten käyttäjä jäisi jumiin tilaan
+// jossa uloskirjautuminen palauttaa 401 eikä eväste poistu. Token luetaan
+// silti jos se on kelvollinen, jotta tiedämme kuka kirjautui ulos.
+router.post('/logout', async (req, res) => {
   try {
-    const user = await User.findById(req.userId).select('username role');
-    if (user) {
-      await writeLog({
-        actor: user,
-        action: 'logout',
-        description: `${user.username} kirjautui ulos`,
-        req,
-      });
+    const token = req.cookies.token;
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.userId).select('username role');
+      if (user) {
+        await writeLog({
+          actor: user,
+          action: 'logout',
+          description: `${user.username} kirjautui ulos`,
+          req,
+        });
+      }
     }
   } catch (err) {
-    console.error(err);
+    // Vanhentunut/virheellinen token: ei lokitusta, mutta eväste silti pois.
   }
   res.clearCookie('token');
   res.json({ message: 'Uloskirjautuminen onnistui' });
@@ -192,6 +201,10 @@ router.patch('/username', requireAuth, validate(updateUsernameSchema), async (re
     const oldUsername = user.username;
     user.username = username;
     await user.save();
+
+    // Uusi token, samoin kuin salasanan ja sähköpostin vaihdossa.
+    const token = createToken(user._id);
+    setCookie(res, token);
 
     await writeLog({
       actor: user,
@@ -225,6 +238,11 @@ router.patch('/email', requireAuth, validate(updateEmailSchema), async (req, res
     const oldEmail = user.email;
     user.email = email;
     await user.save();
+
+    // Uusi token samoin kuin salasanan vaihdossa: jos istunto on kaapattu ja
+    // hyökkääjä vaihtaa sähköpostin, vanhat istunnot eivät jää voimaan.
+    const token = createToken(user._id);
+    setCookie(res, token);
 
     await writeLog({
       actor: user,

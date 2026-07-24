@@ -7,6 +7,8 @@ const Log = require('../models/Log');
 const requireAuth = require('../middleware/requireAuth');
 const requireAdmin = require('../middleware/requireAdmin');
 const validate = require('../middleware/validate');
+const validateObjectId = require('../middleware/validateObjectId');
+const mongoose = require('mongoose');
 const writeLog = require('../utils/writeLog');
 const { changeRoleSchema } = require('../schemas/adminSchemas');
 
@@ -46,6 +48,11 @@ router.get('/logs', async (req, res) => {
     const filter = {};
 
     if (req.query.userId) {
+      // Validoi ObjectId ennen kyselyä: virheellinen arvo aiheuttaisi
+      // CastErrorin ja 500-vastauksen.
+      if (!mongoose.Types.ObjectId.isValid(req.query.userId)) {
+        return res.status(400).json({ error: 'Virheellinen käyttäjätunniste' });
+      }
       // Näytä tapahtumat joissa käyttäjä on joko tekijä tai kohde
       filter.$or = [
         { actorId: req.query.userId },
@@ -66,7 +73,7 @@ router.get('/logs', async (req, res) => {
 });
 
 // --- VAIHDA KÄYTTÄJÄN ROOLI ---
-router.patch('/users/:id/role', validate(changeRoleSchema), async (req, res) => {
+router.patch('/users/:id/role', validateObjectId('id'), validate(changeRoleSchema), async (req, res) => {
   const { role } = req.body;
   const targetId = req.params.id;
 
@@ -105,7 +112,7 @@ router.patch('/users/:id/role', validate(changeRoleSchema), async (req, res) => 
 });
 
 // --- AVAA LUKITTU TILI ---
-router.patch('/users/:id/unlock', async (req, res) => {
+router.patch('/users/:id/unlock', validateObjectId('id'), async (req, res) => {
   try {
     const target = await User.findById(req.params.id);
     if (!target) return res.status(404).json({ error: 'Käyttäjää ei löytynyt' });
@@ -135,7 +142,7 @@ router.patch('/users/:id/unlock', async (req, res) => {
 });
 
 // --- POISTA KÄYTTÄJÄ (+ pelitiedot) ---
-router.delete('/users/:id', async (req, res) => {
+router.delete('/users/:id', validateObjectId('id'), async (req, res) => {
   const targetId = req.params.id;
 
   try {

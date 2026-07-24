@@ -86,7 +86,7 @@ app.use('/api/auth/account', accountLimiter);
 
 const saveLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 15,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   handler: jsonLimitHandler('Liian monta tallennuspyyntöä. Odota hetki.'),

@@ -2,12 +2,12 @@ const { z } = require('zod');
 
 // Vain nämä esineet ovat olemassa pelissä. Estää mielivaltaisen inventaarion
 // (esim. keksityt aseet) POST-kutsulla.
-const VALID_ITEMS = ['maila', 'kirves', 'taskulamppu'];
+const VALID_ITEMS = ['maila', 'kirves', 'taskulamppu', 'machete'];
 
 // Vain nämä alueet ovat olemassa.
 const VALID_AREAS = [
   'asunto', 'kaytava', 'aula', 'kaupunki',
-  'metsa', 'mokki', 'kartano', 'hautausmaa', 'kirkko', 'katakombi',
+  'metsa', 'mokki', 'kartano', 'hautausmaa', 'kirkko', 'katakombi', 'fudis'
 ];
 
 // progress-objekti: sallitaan vain boolean/number/string-arvot, ei sisäkkäisiä

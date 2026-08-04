@@ -6,7 +6,7 @@ const VALID_ITEMS = ['maila', 'kirves', 'taskulamppu', 'machete'];
 
 // Vain nämä alueet ovat olemassa.
 const VALID_AREAS = [
-  'asunto', 'kaytava', 'aula', 'kaupunki','metsa', 'mokki', 'hautausmaa', 'katakombi', 'kirkko', 'jalkapallokentta','joki', 'kartano', 'katu'
+  'asunto', 'kaytava', 'aula', 'kaupunki','metsa', 'mokki', 'hautausmaa', 'katakombi', 'kirkko', 'jalkapallokentta','joki', 'kartano'
 ];
 
 // progress-objekti: sallitaan vain boolean/number/string-arvot, ei sisäkkäisiä
